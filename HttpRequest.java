@@ -22,24 +22,27 @@ public final class HttpRequest implements Runnable {
 	}
 
 	// Retorno do MIME para o Content-Type do cabeçalho
+	
+	String line = "Content-type: ";
+	
 	private String contentType(String fileName) {
 		if (fileName.endsWith(".htm") || fileName.endsWith(".html")) {
-			return "text/html";
+			return line + "text/html";
 		}
 
 		if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) {
-			return "image/jpeg";
+			return line +  "image/jpeg";
 		}
 
 		if (fileName.endsWith(".gif")) {
-			return "image/gif";
+			return line +  "image/gif";
 		}
 
 		if (fileName.endsWith(".pdf")) {
-			return "application/pdf";
+			return line +  "application/pdf";
 		}
 
-		return "application/octet-stream";
+		return line +  "application/octet-stream";
 	}
 
 	// Envio do arquivo solicitado
@@ -71,13 +74,11 @@ public final class HttpRequest implements Runnable {
 
 		if (fileExists) {
 			statusLine = httpVersion + "200" + CRLF;
-			contentTypeLine = "Content-type: " +
-					contentType(fileName) + CRLF;
-
+			contentTypeLine = contentType(fileName) + CRLF;
 		} else {
 			statusLine = httpVersion + "404" + CRLF;
-			contentTypeLine  = "Content-type: " +
-					contentType(".htm") + CRLF;
+			contentTypeLine  = contentType(".htm") + CRLF;
+			System.out.println(contentTypeLine);
 			entityBody =   "<HTML>"
 					+ "<HEAD><TITLE>Not Found</TITLE></HEAD>" 
 					+ "<BODY>" + fileName + " não encontrado</BODY>"
