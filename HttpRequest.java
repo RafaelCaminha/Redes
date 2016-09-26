@@ -1,10 +1,13 @@
 import java.io.* ;
 import java.net.* ;
 import java.util.* ;
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
 
 public final class HttpRequest implements Runnable {
 
 	final static String CRLF = "\r\n";
+	final static String SPACE = " ";
 	Socket socket;
 
 	// Construtor 
@@ -46,20 +49,38 @@ public final class HttpRequest implements Runnable {
 	}
 
 	// Envio do arquivo solicitado
-	private void sendBytes(FileInputStream fis, OutputStream os) throws Exception {
+	private int sendBytes(FileInputStream fis, OutputStream os) throws Exception {
 		// Construir um buffer de 1K para comportar os bytes no caminho para o socket.
 		byte[] buffer = new byte[1024];
 		int bytes = 0;
+		int totalBytes = 0;
 		// Copiar o arquivo requisitado dentro da cadeia de saída do socket
 		while((bytes = fis.read(buffer)) != -1) {
 			os.write(buffer, 0, bytes);
+			totalBytes += bytes;
 		}
+		
+		return totalBytes;
+	}
+	
+	void writeLog(String line) {
+		File log = new File("data.log");
+		try {
+			FileWriter fwLog = new FileWriter(log, true);
+			fwLog.write(line + CRLF);
+			fwLog.close();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
 	}
 
-	void response(String fileName, String httpVersion, DataOutputStream os)
+	void response(String fileName, String address, String httpVersion, DataOutputStream os)
 			throws Exception {
 		FileInputStream fis = null;
 		Boolean fileExists = true;
+		int bytes = 0;
 
 		// Tenta abrir o arquivo requisitado
 		try {
@@ -93,11 +114,19 @@ public final class HttpRequest implements Runnable {
 		os.writeBytes(CRLF);
 
 		if(fileExists) {
-			sendBytes(fis, os);
+			bytes = sendBytes(fis, os);
 			fis.close();
 		} else {
 			os.writeBytes(entityBody);
-		}		
+		}
+		
+		 Calendar cal = Calendar.getInstance();
+	     SimpleDateFormat sdf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
+		
+		writeLog(address + SPACE +
+				sdf.format(cal.getTime()) + SPACE + 
+				fileName + SPACE +
+				bytes);
 	}
 
 	// Processamento da requisição
@@ -116,8 +145,16 @@ public final class HttpRequest implements Runnable {
 		String httpVersion = tokens.nextToken();
 		// Ajuste para que o arquivo seja buscado no diretório local
 		fileName = "." + fileName;
-
-		response(fileName, httpVersion, os);
+		
+		tokens = new StringTokenizer(br.readLine());
+		
+		// Ignora "Host:"
+		tokens.nextToken();
+		
+		// Obtem o endereço e a porta de origem
+		String address = tokens.nextToken(); 
+		
+		response(fileName, address, httpVersion, os);
 
 		// Fechamento das cadeias e socket
 		os.close();
