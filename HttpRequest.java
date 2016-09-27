@@ -2,38 +2,45 @@ import java.io.* ;
 import java.net.* ;
 import java.util.* ;
 import java.text.SimpleDateFormat;
-import java.util.Calendar;
+import javax.xml.bind.DatatypeConverter;
 
 public final class HttpRequest implements Runnable {
 
 	final static String CRLF = "\r\n";
 	final static String SPACE = " ";
 	Socket socket;
+	boolean auth = false;
+	boolean listDirectory = false;
 
 	// Construtor 
 	public HttpRequest(Socket socket) throws Exception {
 		this.socket = socket;
+
+		Properties properties = new Properties();
+		properties.load(new FileInputStream("directory.properties"));
+		listDirectory = Boolean.parseBoolean(properties.getProperty("list"));
 	}
+
 
 	// Interface Runnable
 	public void run() {
 		try {
 			processRequest();
 		} catch (Exception e) {
-			System.out.println(e);
+			e.printStackTrace();
 		}
 	}
 
 	// Retorno do MIME para o Content-Type do cabeçalho
-	
+
 	String line = "Content-type: ";
-	
+
 	private String contentType(String fileName) {
 		if (fileName.endsWith(".htm") || fileName.endsWith(".html")) {
 			return line + "text/html";
 		}
 
-		if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) {
+		if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg") || fileName.endsWith(".png")) {
 			return line +  "image/jpeg";
 		}
 
@@ -59,10 +66,10 @@ public final class HttpRequest implements Runnable {
 			os.write(buffer, 0, bytes);
 			totalBytes += bytes;
 		}
-		
+
 		return totalBytes;
 	}
-	
+
 	void writeLog(String line) {
 		File log = new File("data.log");
 		try {
@@ -73,7 +80,17 @@ public final class HttpRequest implements Runnable {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		
+
+	}
+
+	private void verifyAuthorization(String authorization) {
+		if (authorization != null) {
+			byte[] decoded = DatatypeConverter.parseBase64Binary(authorization);
+			String decodedString = new String(decoded);
+			String[] userInfo = decodedString.split(":");		
+
+			auth = userInfo[0].equals("redes") && userInfo[1].equals("diploma");
+		}
 	}
 
 	void response(String fileName, String address, String httpVersion, DataOutputStream os)
@@ -82,47 +99,103 @@ public final class HttpRequest implements Runnable {
 		Boolean fileExists = true;
 		int bytes = 0;
 
-		// Tenta abrir o arquivo requisitado
-		try {
-			fis = new FileInputStream(fileName);
-		} catch (FileNotFoundException e) {
-			fileExists = false;
-		}
 		// Constrói a mensagem de resposta
 		String statusLine = null;
 		String contentTypeLine = null;
 		String entityBody = null;
 
-		if (fileExists) {
-			statusLine = httpVersion + "200" + CRLF;
-			contentTypeLine = contentType(fileName) + CRLF;
-		} else {
-			statusLine = httpVersion + "404" + CRLF;
-			contentTypeLine  = contentType(".htm") + CRLF;
-			System.out.println(contentTypeLine);
-			entityBody =   "<HTML>"
-					+ "<HEAD><TITLE>Not Found</TITLE></HEAD>" 
-					+ "<BODY>" + fileName + " não encontrado</BODY>"
-					+ "</HTML>";
-		}
-		
-		// Enviar a linha de status.
-		os.writeBytes(statusLine);
-		// Enviar a linha de tipo de conteúdo.
-		os.writeBytes(contentTypeLine);
-		// Enviar uma linha em branco para indicar o fim das linhas de cabeçalho.		
-		os.writeBytes(CRLF);
+		File path = new File(fileName);
 
-		if(fileExists) {
-			bytes = sendBytes(fis, os);
-			fis.close();
+		if (!path.isDirectory()) {
+			// Tenta abrir o arquivo requisitado
+			try {
+				fis = new FileInputStream(fileName);
+			} catch (FileNotFoundException e) {
+				fileExists = false;
+			}
+			if (fileExists) {
+				statusLine = httpVersion + " 200" + CRLF;
+				contentTypeLine = contentType(fileName) + CRLF;
+			} else {
+				statusLine = httpVersion + " 404" + CRLF;
+				contentTypeLine  = contentType(".htm") + CRLF;
+				entityBody =   "<HTML>"
+						+ "<HEAD><TITLE>Not Found</TITLE></HEAD>" 
+						+ "<BODY>" + fileName + " não encontrado</BODY>"
+						+ "</HTML>";
+			}
+
+			// Enviar a linha de status.
+			os.writeBytes(statusLine);
+			// Enviar a linha de tipo de conteúdo.
+			os.writeBytes(contentTypeLine);
+			// Enviar uma linha em branco para indicar o fim das linhas de cabeçalho.		
+			os.writeBytes(CRLF);
+
+			if(fileExists) {
+				bytes = sendBytes(fis, os);
+				fis.close();
+			} else {
+				os.writeBytes(entityBody);
+			}
+
 		} else {
-			os.writeBytes(entityBody);
-		}
-		
-		 Calendar cal = Calendar.getInstance();
-	     SimpleDateFormat sdf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
-		
+			if (auth) {
+				if (listDirectory) {
+					File folder = new File(fileName);
+					File[] files = folder.listFiles();
+
+					statusLine = httpVersion + " 200" + " OK" + CRLF;
+					contentTypeLine = contentType(".html") + CRLF;
+					entityBody =  "<HTML>"
+								+ "<HEAD><TITLE>Arquivos do diretório " + fileName + " </TITLE></HEAD>" 
+								+ "<BODY><H1>Listagem dos arquivos do diretório " + fileName + "</H1>";
+
+					for (int i = 0; i < files.length; i++) {
+						if (files[i].isFile()) {
+							entityBody += "<br><a href=\""+ fileName + "/" + files[i].getName() +" \">" + files[i].getName() + "</a> ";
+						} else if (files[i].isDirectory()) {
+							entityBody += "<br><a href=\""+ fileName + "/" + files[i].getName() +" \">/" + files[i].getName() + "</a> ";
+						}
+					}		
+					
+					entityBody += "</BODY></HTML>";
+					os.writeBytes(statusLine);
+					os.writeBytes(contentTypeLine);
+					os.writeBytes(CRLF);
+					os.writeBytes(entityBody);
+				} else {
+					statusLine = httpVersion + " 403" + CRLF;
+					contentTypeLine  = contentType(".htm") + CRLF;
+					entityBody =   "<HTML>"
+							+ "<HEAD><TITLE>Forbidden</TITLE></HEAD>" 
+							+ "<BODY>O conteúdo do diretório não pode ser listado</BODY>"
+							+ "</HTML>";
+					
+					os.writeBytes(statusLine);
+					os.writeBytes(contentTypeLine);
+					os.writeBytes(CRLF);
+					os.writeBytes(entityBody);
+				}
+			} else {
+				statusLine = httpVersion + " 401" + CRLF;
+				contentTypeLine  = "WWW-Authenticate: Basic realm=\"Acesso restrito. Identifique-se:\"" + CRLF;
+				entityBody =   "<HTML>"
+						+ "<HEAD><TITLE>Forbidden</TITLE></HEAD>" 
+						+ "<BODY>O conteúdo do diretório não pode ser listado</BODY>"
+						+ "</HTML>";
+				
+				os.writeBytes(statusLine);
+				os.writeBytes(contentTypeLine);
+				os.writeBytes(CRLF);
+				os.writeBytes(entityBody);
+			}
+
+		}			
+
+		Calendar cal = Calendar.getInstance();
+		SimpleDateFormat sdf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
+
 		writeLog(address + SPACE +
 				sdf.format(cal.getTime()) + SPACE + 
 				fileName + SPACE +
@@ -145,15 +218,29 @@ public final class HttpRequest implements Runnable {
 		String httpVersion = tokens.nextToken();
 		// Ajuste para que o arquivo seja buscado no diretório local
 		fileName = "." + fileName;
-		
+
+		if (fileName.equals("./"))
+			fileName += "index.html";
+
 		tokens = new StringTokenizer(br.readLine());
-		
+
 		// Ignora "Host:"
 		tokens.nextToken();
-		
+
 		// Obtem o endereço e a porta de origem
-		String address = tokens.nextToken(); 
-		
+		String address = tokens.nextToken();
+		String authorization = null;
+
+		String headerLine = null;
+
+		while ((headerLine = br.readLine()).length() != 0) {
+			if (headerLine.startsWith("Authorization")) {
+				authorization = headerLine.substring(21);
+				break;
+			}
+		}
+
+		verifyAuthorization(authorization);
 		response(fileName, address, httpVersion, os);
 
 		// Fechamento das cadeias e socket
