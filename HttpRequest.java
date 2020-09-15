@@ -1,23 +1,19 @@
-import java.io.* ;
-import java.net.* ;
-import java.util.* ;
+import java.io.*;
+import java.net.*;
 import java.text.SimpleDateFormat;
-import javax.xml.bind.DatatypeConverter;
+import java.util.*;
 
 public final class HttpRequest implements Runnable {
     final static String CRLF = "\r\n";
     final static String SPACE = " ";
     Socket socket;
-    boolean auth = false;
-    boolean listDirectory = false;
+    boolean auth = true;
+    boolean listDirectory = true;
 
     // Construtor 
-    public HttpRequest(Socket socket) throws Exception {
+    public HttpRequest(final Socket socket) throws Exception {
         this.socket = socket;
 
-        Properties properties = new Properties();
-        properties.load(new FileInputStream("directory.properties"));
-        listDirectory = Boolean.parseBoolean(properties.getProperty("list"));
     }
 
 
@@ -25,7 +21,7 @@ public final class HttpRequest implements Runnable {
     public void run() {
         try {
             processRequest();
-        } catch (Exception e) {
+        } catch (final Exception e) {
             e.printStackTrace();
         }
     }
@@ -34,7 +30,7 @@ public final class HttpRequest implements Runnable {
 
     String line = "Content-type: ";
 
-    private String contentType(String fileName) {
+    private String contentType(final String fileName) {
         if (fileName.endsWith(".htm") || fileName.endsWith(".html")) {
             return line + "text/html";
         }
@@ -55,9 +51,9 @@ public final class HttpRequest implements Runnable {
     }
 
     // Envio do arquivo solicitado
-    private int sendBytes(FileInputStream fis, OutputStream os) throws Exception {
+    private int sendBytes(final FileInputStream fis, final OutputStream os) throws Exception {
         // Construir um buffer de 1K para comportar os bytes no caminho para o socket.
-        byte[] buffer = new byte[1024];
+        final byte[] buffer = new byte[1024];
         int bytes = 0;
         int totalBytes = 0;
         // Copiar o arquivo requisitado dentro da cadeia de saída do socket
@@ -70,31 +66,31 @@ public final class HttpRequest implements Runnable {
     }
 
 
-    void writeLog(String line) {
-        File log = new File("data.log");
+    void writeLog(final String line) {
+        final File log = new File("data.text");
         try {
-            FileWriter fwLog = new FileWriter(log, true);
+            final FileWriter fwLog = new FileWriter(log, true);
             fwLog.write(line + CRLF);
             fwLog.close();
-        } catch (IOException e) {
+        } catch (final IOException e) {
             e.printStackTrace();
         }
 
     }
 
 
-    private void verifyAuthorization(String authorization) {
+/*     private void verifyAuthorization(final String authorization) {
         if (authorization != null) {
-            byte[] decoded = DatatypeConverter.parseBase64Binary(authorization);
-            String decodedString = new String(decoded);
-            String[] userInfo = decodedString.split(":");       
+            final byte[] decoded = DatatypeConverter.parseBase64Binary(authorization);
+            final String decodedString = new String(decoded);
+            final String[] userInfo = decodedString.split(":");       
 
             auth = userInfo[0].equals("redes") && userInfo[1].equals("diploma");
         }
-    }
+    } */
 
 
-    void response(String fileName, String address, String httpVersion, DataOutputStream os)
+    void response(final String fileName, final String address, final String httpVersion, final DataOutputStream os)
             throws Exception {
         FileInputStream fis = null;
         Boolean fileExists = true;
@@ -105,13 +101,13 @@ public final class HttpRequest implements Runnable {
         String contentTypeLine = null;
         String entityBody = null;
 
-        File path = new File(fileName);
+        final File path = new File(fileName);
 
         if (!path.isDirectory()) {
             // Tenta abrir o arquivo requisitado
             try {
                 fis = new FileInputStream(fileName);
-            } catch (FileNotFoundException e) {
+            } catch (final FileNotFoundException e) {
                 fileExists = false;
             }
             if (fileExists) {
@@ -143,8 +139,8 @@ public final class HttpRequest implements Runnable {
         } else {
             if (auth) {
                 if (listDirectory) {
-                    File folder = new File(fileName);
-                    File[] files = folder.listFiles();
+                    final File folder = new File(fileName);
+                    final File[] files = folder.listFiles();
 
                     statusLine = httpVersion + " 200" + " OK" + CRLF;
                     contentTypeLine = contentType(".html") + CRLF;
@@ -179,26 +175,14 @@ public final class HttpRequest implements Runnable {
                     os.writeBytes(CRLF);
                     os.writeBytes(entityBody);
                 }
-            } else {
-                statusLine = httpVersion + " 401" + CRLF;
-                contentTypeLine  = "WWW-Authenticate: Basic realm=\"Acesso restrito. Identifique-se:\"" + CRLF;
-                entityBody = "<html>"
-                            + "<head><title>Forbidden</title></head>" 
-                            + "<body>O conteúdo do diretório não pode ser listado</body>"
-                            + "</html>";
-                
-                os.writeBytes(statusLine);
-                os.writeBytes(contentTypeLine);
-                os.writeBytes(CRLF);
-                os.writeBytes(entityBody);
             }
 
         }           
 
-        Calendar cal = Calendar.getInstance();
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
+        final Calendar cal = Calendar.getInstance();
+        final SimpleDateFormat sdf = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
 
-        String log = address + SPACE +
+        final String log = address + SPACE +
                 sdf.format(cal.getTime()) + SPACE + 
                 fileName + SPACE +
                 bytes;
@@ -210,9 +194,9 @@ public final class HttpRequest implements Runnable {
 
     // Processamento da requisição
     private void processRequest() throws Exception {
-        InputStream is = this.socket.getInputStream();
-        DataOutputStream os = new DataOutputStream(this.socket.getOutputStream());
-        BufferedReader br = new BufferedReader(new InputStreamReader(is));
+        final InputStream is = this.socket.getInputStream();
+        final DataOutputStream os = new DataOutputStream(this.socket.getOutputStream());
+        final BufferedReader br = new BufferedReader(new InputStreamReader(is));
 
         // Extração do nome do arquivo a linha de requisição.
         StringTokenizer tokens = new StringTokenizer(br.readLine());
@@ -221,12 +205,12 @@ public final class HttpRequest implements Runnable {
         // Obtenção do nome do arquivo
         String fileName = tokens.nextToken(); 
         // Obtenção da versão do HTML
-        String httpVersion = tokens.nextToken();
+        final String httpVersion = tokens.nextToken();
         // Ajuste para que o arquivo seja buscado no diretório local
         fileName = "." + fileName;
 
         if (fileName.equals("./"))
-            fileName += "index.html";
+            fileName += "";
 
         tokens = new StringTokenizer(br.readLine());
 
@@ -234,19 +218,16 @@ public final class HttpRequest implements Runnable {
         tokens.nextToken();
 
         // Obtem o endereço e a porta de origem
-        String address = tokens.nextToken();
-        String authorization = null;
+        final String address = tokens.nextToken();
+       /*  String authorization = null; */
 
         String headerLine = null;
 
         while ((headerLine = br.readLine()).length() != 0) {
-            if (headerLine.startsWith("Authorization")) {
-                authorization = headerLine.substring(21);
-                break;
-            }
+            System.out.println(headerLine);
         }
 
-        verifyAuthorization(authorization);
+        /* verifyAuthorization(authorization); */
         response(fileName, address, httpVersion, os);
 
         // Fechamento das cadeias e socket
